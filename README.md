@@ -31,6 +31,159 @@ The project is structured into four main phases:
 ### 4. Testing & Frontend
 * **`test_pipeline.py`**: CLI test harness. Verifies the entire end-to-end loop (ChromaDB retrieval + live stock fetching + model generation) directly in the terminal before running the UI.
 * **`app.py`**: Streamlit chatbot interface connecting the fine-tuned model, ChromaDB retriever, and live NSE stock API.
+* **`llm_core.py`**: Shared Python module extracted from `app.py`. Centralizes model loading, RAG retrieval, live stock data, and response generation so both the Streamlit UI and FastAPI endpoints reuse the same logic.
+* **`api.py`**: FastAPI application exposing two sets of endpoints — an **investment-eligibility quiz** and an **AI financial assistant** — for integration with any frontend (React, Vue, Flutter, etc.).
+
+---
+
+## API Endpoints (FastAPI)
+
+Run the API server:
+```bash
+python -m uvicorn api:app --reload --port 8000
+# or  python api.py
+```
+
+Interactive docs are available at `http://localhost:8000/docs`.
+
+### Quiz Endpoints — `/quiz`
+
+The quiz flow has three steps:
+
+---
+
+#### `GET /quiz` — List available stocks
+
+```http
+GET /quiz
+```
+
+**Response:**
+```json
+{
+  "message": "Welcome to the BharatFinanceEdu Investment Quiz! Choose a stock...",
+  "available_stocks": {
+    "RELIANCE": "RELIANCE",
+    "TATA MOTORS": "TATA MOTORS",
+    "HDFC": "HDFC",
+    "SBI": "SBI",
+    "INFOSYS": "INFOSYS"
+  }
+}
+```
+
+---
+
+#### `POST /quiz` — Generate 5 multiple-choice questions for a stock
+
+```http
+POST /quiz
+Content-Type: application/json
+
+{"stock_name": "RELIANCE"}
+```
+
+**Response:**
+```json
+{
+  "quiz_id": "quiz_a1b2c3d4",
+  "stock_name": "RELIANCE",
+  "questions": [
+    {
+      "question": "What is Reliance's dividend payout trend in FY2024?",
+      "options": {
+        "A": "15%",
+        "B": "25%",
+        "C": "35%",
+        "D": "45%"
+      }
+    }
+    // ... 4 more questions
+  ]
+}
+```
+
+---
+
+#### `POST /quiz/submit` — Submit answers and receive a score
+
+```http
+POST /quiz/submit
+Content-Type: application/json
+
+{
+  "quiz_id": "quiz_a1b2c3d4",
+  "answers": ["A", "C", "B", "D", "A"]
+}
+```
+
+**Response:**
+```json
+{
+  "score": 4,
+  "total": 5,
+  "eligible": true,
+  "correct_answers": ["A", "C", "B", "D", "C"],
+  "feedback": "Good job! You understand the basics. Trade responsibly."
+}
+```
+
+> **Eligibility rule:** Score ≥ 60% → `eligible: true`
+
+---
+
+### Assistant Endpoints — `/assistant`
+
+An AI assistant bubble for answering basic finance questions.
+
+---
+
+#### `POST /assistant` — Send a message and get a reply
+
+```http
+POST /assistant
+Content-Type: application/json
+
+{
+  "message": "Should I invest in Reliance right now?",
+  "session_id": "user_123",
+  "chat_history": []
+}
+```
+
+**Response:**
+```json
+{
+  "reply": "Based on the latest data, Reliance (RELIANCE.NS) is currently trading at ₹2,450...",
+  "sources": ["SEBI/RBI Knowledge Base (ChromaDB)"],
+  "live_data": true
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reply` | `string` | The assistant's response text |
+| `sources` | `array[string]` | Knowledge base sources consulted |
+| `live_data` | `boolean` | Whether live stock data was used |
+
+---
+
+#### `GET /assistant/history/{session_id}` — Retrieve chat history
+
+```http
+GET /assistant/history/user_123
+```
+
+**Response:**
+```json
+{
+  "session_id": "user_123",
+  "history": [
+    {"role": "user", "content": "What is a mutual fund?"},
+    {"role": "assistant", "content": "A mutual fund is..."}
+  ]
+}
+```
 
 ---
 
@@ -38,6 +191,16 @@ The project is structured into four main phases:
 
 ### 1. Install Dependencies
 ```bash
-pip install peft transformers langchain langchain-community langchain-huggingface chromadb sentence-transformers yfinance streamlit
+pip install peft transformers langchain langchain-community langchain-huggingface chromadb sentence-transformers yfinance streamlit gTTS playsound3 fastapi uvicorn
+
+# Quick test
 python test_pipeline.py
+
+# Run the Streamlit UI
 streamlit run app.py
+
+# Run the FastAPI server (alternative to Streamlit)
+python api.py
+# or
+python -m uvicorn api:app --reload --port 8000
+```

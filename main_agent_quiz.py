@@ -2,7 +2,9 @@ from gradio_client import Client
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from live_stock_api import get_live_stock_data
-import time
+from asr_and_tts import run_multilingual_tts
+
+TTS_LANGUAGE = "mr"
 
 # --- 1. CONFIGURATION ---
 COLAB_API_URL = "https://6049c98a29d60cb6f2.gradio.live"
@@ -64,6 +66,10 @@ def generate_personalized_advice(user_question, risk_profile):
         print("\n================ AI EDUCATOR RESPONSE ================")
         print(response)
         print("======================================================")
+        try:
+            run_multilingual_tts(response, lang_code=TTS_LANGUAGE)
+        except Exception as e:
+            print(f"\n❌ [AUDIO OUTPUT ERROR] Could not speak the answer: {e}")
     except Exception as e:
         print(f"\n❌ [ERROR] Model prediction failed: {e}")
 
@@ -71,7 +77,8 @@ def generate_personalized_advice(user_question, risk_profile):
 user_risk_profile = run_investor_quiz()
 
 while True:
-    question = input("\nAsk your financial question (or type 'exit'): ")
-    if question.lower() == 'exit':
+    question = input("\nAsk your financial question (or type 'exit'): ").strip()
+    if question.lower() == "exit":
         break
-    generate_personalized_advice(question, user_risk_profile)
+    if question:
+        generate_personalized_advice(question, user_risk_profile)
